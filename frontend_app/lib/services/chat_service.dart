@@ -11,12 +11,13 @@ class ChatService {
   // 📤 SEND MESSAGE TO BACKEND
   static Future<Map<String, dynamic>> sendMessage({
     required String message,
-    required bool ghostMode,
+    bool ghostMode = false,
     String session_id = "default",
     String inputType = "text",
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString("auth_token");
+    // 🔥 Get a FRESH token directly from Firebase to prevent 1-hour expiration 401 errors!
+    final user = FirebaseAuth.instance.currentUser;
+    final token = user != null ? await user.getIdToken(true) : null;
 
     final res = await http.post(
       Uri.parse("$baseUrl/chat/message"),

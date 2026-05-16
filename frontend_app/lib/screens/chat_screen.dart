@@ -320,8 +320,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
       setState(() => _loading = false);
 
-      if (res["error"] != null) {
-        _showSnack(res["error"]);
+      if (res["error"] != null || res["detail"] != null) {
+        _showSnack(res["error"] ?? res["detail"]);
       } else {
         print("API RESPONSE: $res");
         
