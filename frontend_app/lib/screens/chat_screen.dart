@@ -798,23 +798,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                   ),
                   onPressed: () => _toggleGhostMode(!_ghostMode),
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                  child: Row(
-                    children: [
-                      Text(_ghostMode ? "👻" : "👤", style: const TextStyle(fontSize: 16)),
-                      const SizedBox(width: 4),
-                      Switch(
-                        value: _ghostMode,
-                        onChanged: (val) {
-                          _toggleGhostMode(val);
-                        },
-                        activeColor: primaryColor,
-                        inactiveThumbColor: Colors.grey,
-                      ),
-                    ],
-                  ),
-                ),
               ],
             ),
           ),
