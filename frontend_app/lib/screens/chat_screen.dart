@@ -781,8 +781,11 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               ),
               actions: [
                 IconButton(
-                  icon: Icon(Icons.person_outline_rounded, color: primaryColor),
-                  onPressed: () => Navigator.pushNamed(context, '/profile'),
+                  icon: Icon(
+                    _ghostMode ? Icons.visibility_off_rounded : Icons.visibility_rounded, 
+                    color: primaryColor,
+                  ),
+                  onPressed: () => _toggleGhostMode(!_ghostMode),
                 ),
                 IconButton(
                   icon: Icon(Icons.bar_chart_rounded, color: primaryColor),

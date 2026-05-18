@@ -119,6 +119,20 @@ class UsagePatternsScreen extends StatelessWidget {
                     chart: _buildMonthlyChart(),
                   ),
                   
+                  const SizedBox(height: 20),
+                  
+                  // Yearly Usage Card
+                  _buildUsageCard(
+                    context,
+                    title: "Yearly Usage",
+                    subtitle: "Current Year",
+                    value: "420h 15m",
+                    percentage: "+15%",
+                    icon: Icons.calendar_today_rounded,
+                    color: Colors.amber,
+                    chart: _buildYearlyChart(),
+                  ),
+                  
                   const SizedBox(height: 40),
                 ],
               ),
@@ -328,6 +342,43 @@ class UsagePatternsScreen extends StatelessWidget {
             belowBarData: BarAreaData(
               show: true,
               color: Colors.deepPurple.withOpacity(0.1),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildYearlyChart() {
+    return LineChart(
+      LineChartData(
+        gridData: const FlGridData(show: false),
+        titlesData: const FlTitlesData(show: false),
+        borderData: FlBorderData(show: false),
+        lineBarsData: [
+          LineChartBarData(
+            spots: const [
+              FlSpot(0, 10),
+              FlSpot(1, 15),
+              FlSpot(2, 20),
+              FlSpot(3, 18),
+              FlSpot(4, 25),
+              FlSpot(5, 30),
+              FlSpot(6, 28),
+              FlSpot(7, 35),
+              FlSpot(8, 42),
+              FlSpot(9, 38),
+              FlSpot(10, 48),
+              FlSpot(11, 55),
+            ],
+            isCurved: true,
+            color: Colors.amber,
+            barWidth: 3,
+            isStrokeCapRound: true,
+            dotData: const FlDotData(show: false),
+            belowBarData: BarAreaData(
+              show: true,
+              color: Colors.amber.withOpacity(0.1),
             ),
           ),
         ],
