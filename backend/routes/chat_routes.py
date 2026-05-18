@@ -30,6 +30,11 @@ class PrivacyUpdate(BaseModel):
     is_private: bool
 
 
+# ── Model for Session Deletion ──
+class DeleteSessionsRequest(BaseModel):
+    session_ids: list[str]
+
+
 # ── HELPER: Get stress score from level ─────────────────────────
 def map_stress_level(level: str) -> int:
     mapping = {"low": 30, "medium": 60, "high": 85}
@@ -338,6 +343,30 @@ def clear_chat_history(authorization: Optional[str] = Header(None)):
     return {
         "message": "Chat history cleared",
         "deleted_count": len(docs)
+    }
+
+
+# ── DELETE SPECIFIC CHAT SESSIONS ───────────────────
+@router.post("/delete-sessions")
+def delete_chat_sessions(req: DeleteSessionsRequest, authorization: Optional[str] = Header(None)):
+    user = get_user_from_token(authorization)
+    user_id = user.get("user_id")
+    
+    if not db:
+        raise HTTPException(status_code=500, detail="Database not initialized")
+        
+    chats_ref = db.collection("chats")
+    deleted_count = 0
+    
+    for session_id in req.session_ids:
+        docs = chats_ref.where("user_id", "==", user_id).where("session_id", "==", session_id).get()
+        for doc in docs:
+            doc.reference.delete()
+            deleted_count += 1
+            
+    return {
+        "message": f"Successfully deleted {len(req.session_ids)} sessions",
+        "deleted_count": deleted_count
     }
 
 

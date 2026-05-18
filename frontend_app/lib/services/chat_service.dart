@@ -150,4 +150,22 @@ class ChatService {
 
     return trends;
   }
+
+  // 🗑️ DELETE SPECIFIC CHAT SESSIONS
+  static Future<Map<String, dynamic>> deleteSessions(List<String> sessionIds) async {
+    final token = await getFreshFirebaseToken();
+
+    final res = await http.post(
+      Uri.parse("$baseUrl/chat/delete-sessions"),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+      body: jsonEncode({
+        "session_ids": sessionIds,
+      }),
+    );
+    final decodedBody = utf8.decode(res.bodyBytes);
+    return jsonDecode(decodedBody);
+  }
 }

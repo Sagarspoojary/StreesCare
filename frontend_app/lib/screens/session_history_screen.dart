@@ -40,6 +40,11 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
   bool _loading = true;
   List<ChatSession> _sessions = [];
   String _errorMessage = "";
+  
+  // 🗑️ Selection & Deletion State
+  bool _isSelectionMode = false;
+  final Set<String> _selectedSessionIds = {};
+  bool _isDeleting = false;
 
   @override
   void initState() {
@@ -181,26 +186,73 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
       backgroundColor: bgColor,
       appBar: AppBar(
         title: Text(
-          "Session History", 
+          _isSelectionMode ? "${_selectedSessionIds.length} Selected" : "Session History", 
           style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 20)
         ),
         backgroundColor: cardColor,
         elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, color: textColor),
-          onPressed: () => Navigator.pop(context),
-        ),
+        leading: _isSelectionMode
+            ? IconButton(
+                icon: Icon(Icons.close, color: textColor),
+                onPressed: () {
+                  setState(() {
+                    _isSelectionMode = false;
+                    _selectedSessionIds.clear();
+                  });
+                },
+              )
+            : IconButton(
+                icon: Icon(Icons.arrow_back_ios_new_rounded, color: textColor),
+                onPressed: () => Navigator.pop(context),
+              ),
         actions: [
-          if (widget.isGhostMode)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.0),
-              child: Center(
-                child: Text(
-                  "👻 Ghost Mode ON", 
-                  style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 12)
+          if (_isSelectionMode) ...[
+            IconButton(
+              icon: Icon(
+                _selectedSessionIds.length == _sessions.length
+                    ? Icons.deselect_rounded
+                    : Icons.select_all_rounded,
+                color: textColor,
+              ),
+              tooltip: _selectedSessionIds.length == _sessions.length ? "Deselect All" : "Select All",
+              onPressed: () {
+                setState(() {
+                  if (_selectedSessionIds.length == _sessions.length) {
+                    _selectedSessionIds.clear();
+                  } else {
+                    _selectedSessionIds.clear();
+                    _selectedSessionIds.addAll(_sessions.map((s) => s.sessionId));
+                  }
+                });
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_sweep_rounded, color: Colors.redAccent),
+              tooltip: "Delete Selected",
+              onPressed: _confirmDeleteSelected,
+            ),
+          ] else ...[
+            if (widget.isGhostMode)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8.0),
+                child: Center(
+                  child: Text(
+                    "👻 Ghost ON", 
+                    style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 11)
+                  ),
                 ),
               ),
-            )
+            if (_sessions.isNotEmpty)
+              IconButton(
+                icon: Icon(Icons.edit_note_rounded, color: textColor, size: 28),
+                tooltip: "Select and Delete Sessions",
+                onPressed: () {
+                  setState(() {
+                    _isSelectionMode = true;
+                  });
+                },
+              ),
+          ]
         ],
       ),
       body: _loading
@@ -267,11 +319,19 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
       badgeColor = Colors.green.shade400;
     }
 
+    final bool isSelected = _selectedSessionIds.contains(session.sessionId);
+
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 6),
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isSelected 
+              ? primaryColor.withOpacity(0.5) 
+              : Colors.transparent,
+          width: 1.5,
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(widget.isGhostMode ? 0.2 : 0.04),
@@ -285,105 +345,219 @@ class _SessionHistoryScreenState extends State<SessionHistoryScreen> {
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
           onTap: () {
-            widget.onSessionSelected(session.sessionId, session.messages);
-            Navigator.pop(context);
+            if (_isSelectionMode) {
+              setState(() {
+                if (isSelected) {
+                  _selectedSessionIds.remove(session.sessionId);
+                } else {
+                  _selectedSessionIds.add(session.sessionId);
+                }
+              });
+            } else {
+              widget.onSessionSelected(session.sessionId, session.messages);
+              Navigator.pop(context);
+            }
+          },
+          onLongPress: () {
+            if (!_isSelectionMode) {
+              setState(() {
+                _isSelectionMode = true;
+                _selectedSessionIds.add(session.sessionId);
+              });
+            }
           },
           child: Padding(
             padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        session.firstMessagePreview,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: textColor,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15,
-                        ),
-                      ),
+                if (_isSelectionMode) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12.0),
+                    child: Icon(
+                      isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                      color: isSelected ? primaryColor : subTextColor.withOpacity(0.5),
+                      size: 24,
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      _isToday(session.latestTimestamp) ? timeStr : dateStr,
-                      style: TextStyle(
-                        color: subTextColor,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // Emotion Badge
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: primaryColor.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            children: [
-                              Text(
-                                _getEmotionEmoji(session.latestEmotion),
-                                style: const TextStyle(fontSize: 12),
+                  ),
+                ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              session.firstMessagePreview,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: textColor,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 15,
                               ),
-                              const SizedBox(width: 4),
-                              Text(
-                                session.latestEmotion.toUpperCase(),
-                                style: TextStyle(
-                                  color: primaryColor,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 0.5,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            _isToday(session.latestTimestamp) ? timeStr : dateStr,
+                            style: TextStyle(
+                              color: subTextColor,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          // Emotion Badge
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: primaryColor.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Text(
+                                      _getEmotionEmoji(session.latestEmotion),
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      session.latestEmotion.toUpperCase(),
+                                      style: TextStyle(
+                                        color: primaryColor,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
+                              const SizedBox(width: 8),
+                              if (hasStress)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: badgeColor.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    "STRESS: ${session.latestStressScore}%",
+                                    style: TextStyle(
+                                      color: badgeColor,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ),
                             ],
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        if (hasStress)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: badgeColor.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              "STRESS: ${session.latestStressScore}%",
-                              style: TextStyle(
-                                color: badgeColor,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    Icon(
-                      Icons.arrow_forward_ios_rounded,
-                      size: 14,
-                      color: subTextColor.withOpacity(0.5),
-                    )
-                  ],
-                )
+                          Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 14,
+                            color: subTextColor.withOpacity(0.5),
+                          )
+                        ],
+                      )
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
         ),
       ),
     );
+  }
+
+  void _confirmDeleteSelected() {
+    if (_selectedSessionIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("No sessions selected to delete!"),
+          backgroundColor: Colors.orangeAccent,
+        ),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: widget.isGhostMode ? const Color(0xFF1E1E1E) : Colors.white,
+        title: Text(
+          "Delete Sessions?",
+          style: TextStyle(
+            color: widget.isGhostMode ? Colors.white : const Color(0xFF1A1D26),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Text(
+          "Are you sure you want to permanently delete these ${_selectedSessionIds.length} sessions? This cannot be undone.",
+          style: TextStyle(
+            color: widget.isGhostMode ? Colors.white70 : const Color(0xFF6B7280),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _deleteSelectedSessions();
+            },
+            child: const Text("Delete Permanently", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteSelectedSessions() async {
+    setState(() {
+      _isDeleting = true;
+      _loading = true;
+    });
+
+    try {
+      final ids = _selectedSessionIds.toList();
+      final res = await ChatService.deleteSessions(ids);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(res["message"] ?? "Deleted successfully!"),
+          backgroundColor: const Color(0xFF00C9A7),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Error deleting: $e"),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    } finally {
+      _selectedSessionIds.clear();
+      _isSelectionMode = false;
+      _isDeleting = false;
+      _fetchAndGroupHistory();
+    }
   }
 
   String _getEmotionEmoji(String emotion) {
