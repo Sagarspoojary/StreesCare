@@ -77,7 +77,7 @@ class _MobileWaveformPlayerState extends State<_MobileWaveformPlayer> {
     if (isPlaying) {
       await controller.pausePlayer();
     } else {
-      await controller.startPlayer(finishMode: FinishMode.pause);
+      await controller.startPlayer();
     }
   }
 
