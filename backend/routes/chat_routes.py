@@ -285,14 +285,37 @@ def get_chat_history(
     if session_id:
         query = query.where("session_id", "==", session_id)
         
-    docs = query.order_by("created_at", direction=firestore.Query.DESCENDING).limit(50).get()
-    
+    try:
+        docs = query.order_by("created_at", direction=firestore.Query.DESCENDING).limit(100).get()
+    except Exception as index_err:
+        print("⚠️ Missing Firestore composite index, falling back to in-memory sorting:", index_err)
+        docs = query.limit(100).get()
+        
     user_chats = []
     for doc in docs:
         chat = doc.to_dict()
         chat["chat_id"] = doc.id
         if "user_id" in chat: del chat["user_id"]
+        
+        # Serialize created_at Timestamp to ISO 8601 string
+        if "created_at" in chat and chat["created_at"]:
+            try:
+                chat["created_at"] = chat["created_at"].isoformat()
+            except Exception:
+                pass
         user_chats.append(chat)
+        
+    # Sort in-memory descending (Newest first)
+    def get_sort_key(item):
+        val = item.get("created_at") or item.get("timestamp") or ""
+        if isinstance(val, str):
+            return val
+        try:
+            return val.isoformat()
+        except Exception:
+            return str(val)
+            
+    user_chats.sort(key=get_sort_key, reverse=True)
     
     return {"messages": user_chats}
 
