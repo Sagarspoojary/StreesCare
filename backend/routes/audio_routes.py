@@ -6,7 +6,7 @@ import uuid
 import datetime
 from typing import Optional
 
-from utils.audio_emotion import extract_features, transcribe_audio
+from utils.audio_emotion import extract_features, transcribe_audio, detect_emotion_from_audio
 from utils.gemini_ai import get_emotional_response
 from utils.pii_masking import mask_pii
 from routes.chat_routes import get_user_from_token
@@ -51,11 +51,19 @@ async def analyze_audio(
         # 3. PII Masking
         masked_text = mask_pii(transcription)
 
-        # 4. Gemini AI Emotional Response
+        # 4. Separate Vocal Emotion Detection (based ONLY on acoustics)
+        acoustic_analysis = detect_emotion_from_audio({
+            "rms": features["energy"],
+            "zcr": features["pitch_variation"] / 100.0,
+            "centroid": features["speech_rate"] * 10.0
+        })
+        vocal_emotion = acoustic_analysis.get("emotion", "neutral")
+
+        # 5. Gemini AI Emotional Response (strictly based on TEXT content, behaving exactly like text mode)
         gemini_output = get_emotional_response(
             user_message=masked_text,
-            input_type="voice",
-            audio_features=features
+            input_type="text",
+            audio_features=None
         )
 
         if not gemini_output:
@@ -72,7 +80,7 @@ async def analyze_audio(
         final_payload = {
             "transcription": transcription,
             "masked_text": masked_text,
-            "emotion": gemini_output.get("emotion", "neutral"),
+            "emotion": vocal_emotion,
             "stress_score": stress_score,
             "stress_level": "high" if stress_score > 60 else "medium" if stress_score > 40 else "low",
             "analysis": gemini_output.get("analysis", ""),
