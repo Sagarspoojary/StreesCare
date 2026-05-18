@@ -194,6 +194,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         "phone_number": _phoneCtrl.text.trim(),
       });
       if (mounted) {
+        setState(() {}); // 🌟 Force immediate UI re-build to refresh name & avatar initials!
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Profile saved!"), backgroundColor: _teal));
       }
