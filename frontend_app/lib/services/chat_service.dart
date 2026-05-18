@@ -91,8 +91,7 @@ class ChatService {
 
   // 💾 GET CHAT HISTORY
   static Future<List<dynamic>> getChatHistory() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString("auth_token");
+    final token = await getFreshFirebaseToken();
 
     final res = await http.get(
       Uri.parse("$baseUrl/chat/history"),
@@ -108,8 +107,7 @@ class ChatService {
 
   // 🗑️ CLEAR CHAT HISTORY
   static Future<Map<String, dynamic>> clearChatHistory() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString("auth_token");
+    final token = await getFreshFirebaseToken();
 
     final res = await http.delete(
       Uri.parse("$baseUrl/chat/history"),
@@ -123,8 +121,7 @@ class ChatService {
 
   // 📊 GET STRESS TRENDS
   static Future<List<dynamic>> getStressTrends() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString("auth_token");
+    final token = await getFreshFirebaseToken();
 
     final res = await http.get(
       Uri.parse("$baseUrl/chat/stress-trends"),
