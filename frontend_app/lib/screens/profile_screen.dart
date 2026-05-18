@@ -35,14 +35,14 @@ class _ProfileScreenState extends State<ProfileScreen>
   bool   _patternEnabled   = false;
   
   // -- Dynamic Profile Stats Variables --
-  int _totalSessions = 24;
-  int _streakDays = 5;
-  String _latestMood = "Calm";
+  int _totalSessions = 0;
+  int _streakDays = 1;
+  String _latestMood = "Neutral";
   
-  double _stressFraction = 0.28;
-  double _focusFraction = 0.72;
-  double _calmFraction = 0.65;
-  int _wellnessScore = 78;
+  double _stressFraction = 0.0;
+  double _focusFraction = 1.0;
+  double _calmFraction = 1.0;
+  int _wellnessScore = 100;
   String _wellnessChange = "↑ Perfect";
 
   // ── Palette ───────────────────────────────────────────────────────────────
@@ -132,7 +132,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           final Set<String> uniqueSessions = {};
           double totalStress = 0.0;
           int stressCount = 0;
-          String mood = "Calm";
+          String mood = "Neutral";
           
           for (var m in rawMessages) {
             if (m is! Map<String, dynamic>) continue;
@@ -152,33 +152,57 @@ class _ProfileScreenState extends State<ProfileScreen>
             }
           }
           
-          if (uniqueSessions.isNotEmpty) {
-            _totalSessions = uniqueSessions.length;
+          if (mounted) {
+            setState(() {
+              if (uniqueSessions.isNotEmpty) {
+                _totalSessions = uniqueSessions.length;
+              } else {
+                _totalSessions = 0;
+              }
+              
+              if (stressCount > 0) {
+                final double avgStress = totalStress / stressCount;
+                _stressFraction = avgStress / 100.0;
+                if (_stressFraction > 1.0) _stressFraction = 1.0;
+                if (_stressFraction < 0.0) _stressFraction = 0.0;
+                
+                _focusFraction = 1.0 - (_stressFraction * 0.4);
+                if (_focusFraction > 1.0) _focusFraction = 1.0;
+                
+                _calmFraction = 1.0 - _stressFraction;
+                if (_calmFraction > 1.0) _calmFraction = 1.0;
+                
+                _wellnessScore = (100 - avgStress).toInt();
+                if (_wellnessScore > 100) _wellnessScore = 100;
+                if (_wellnessScore < 0) _wellnessScore = 0;
+                
+                _wellnessChange = _wellnessScore >= 85 
+                    ? "↑ Perfect" 
+                    : (_wellnessScore >= 70 ? "↑ Good" : "↑ Stable");
+              } else {
+                _stressFraction = 0.0;
+                _focusFraction = 1.0;
+                _calmFraction = 1.0;
+                _wellnessScore = 100;
+                _wellnessChange = "↑ Perfect";
+              }
+              
+              if (mood.isNotEmpty) {
+                _latestMood = mood[0].toUpperCase() + mood.substring(1);
+              }
+            });
           }
-          
-          if (stressCount > 0) {
-            final double avgStress = totalStress / stressCount;
-            _stressFraction = avgStress / 100.0;
-            if (_stressFraction > 1.0) _stressFraction = 1.0;
-            if (_stressFraction < 0.0) _stressFraction = 0.0;
-            
-            _focusFraction = 1.0 - (_stressFraction * 0.4);
-            if (_focusFraction > 1.0) _focusFraction = 1.0;
-            
-            _calmFraction = 1.0 - _stressFraction;
-            if (_calmFraction > 1.0) _calmFraction = 1.0;
-            
-            _wellnessScore = (100 - avgStress).toInt();
-            if (_wellnessScore > 100) _wellnessScore = 100;
-            if (_wellnessScore < 0) _wellnessScore = 0;
-            
-            _wellnessChange = _wellnessScore >= 85 
-                ? "↑ Perfect" 
-                : (_wellnessScore >= 70 ? "↑ Good" : "↑ Stable");
-          }
-          
-          if (mood.isNotEmpty) {
-            _latestMood = mood[0].toUpperCase() + mood.substring(1);
+        } else {
+          if (mounted) {
+            setState(() {
+              _totalSessions = 0;
+              _latestMood = "Neutral";
+              _stressFraction = 0.0;
+              _focusFraction = 1.0;
+              _calmFraction = 1.0;
+              _wellnessScore = 100;
+              _wellnessChange = "↑ Perfect";
+            });
           }
         }
       } catch (e) {
