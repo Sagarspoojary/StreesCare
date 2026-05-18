@@ -21,9 +21,9 @@ def extract_features(audio_path):
         print(f"DEBUG CENTROID: {centroid:.2f}")
 
         return {
-            "rms": float(rms),
-            "zcr": float(zcr),
-            "centroid": float(centroid)
+            "energy": float(rms),
+            "pitch_variation": float(zcr * 100), # Approximation of variation
+            "speech_rate": float(centroid / 10)  # Approximation of pace
         }
 
     except Exception as e:
@@ -78,3 +78,27 @@ def detect_emotion_from_audio(features):
             "stress_level": "low",
             "burnout_score": 25
         }
+
+import speech_recognition as sr
+
+def transcribe_audio(audio_path: str) -> str:
+    """
+    Converts audio file to text using SpeechRecognition.
+    """
+    recognizer = sr.Recognizer()
+    try:
+        # We need to make sure it's in WAV format for SpeechRecognition
+        # librosa can read many formats, but sr.AudioFile expects standard formats
+        # We'll rely on the frontend sending WAV.
+        with sr.AudioFile(audio_path) as source:
+            audio_data = recognizer.record(source)
+            text = recognizer.recognize_google(audio_data)
+            return text
+    except sr.UnknownValueError:
+        return ""
+    except sr.RequestError as e:
+        print(f"Could not request results from Google Speech Recognition service; {e}")
+        return ""
+    except Exception as e:
+        print(f"Transcription error: {e}")
+        return ""

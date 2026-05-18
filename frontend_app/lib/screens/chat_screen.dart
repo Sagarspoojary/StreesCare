@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'dart:math' as math;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
@@ -552,13 +553,23 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
       setState(() {
         _loading = false;
+        
+        // Update the user's voice message with the transcription
+        if (_messages.isNotEmpty && _messages.last["role"] == "user" && _messages.last["inputType"] == "voice") {
+          _messages.last["content"] = data["transcription"] ?? "Voice Message";
+          _messages.last["masked_text"] = data["masked_text"] ?? data["transcription"];
+        }
+        
         _messages.add({
           "role": "assistant",
-          "content": "I've analyzed your voice message. You sound ${data['emotion']}.",
-          "emotion": data["emotion"],
-          "stress_level": data["stress_level"] ?? "low",
+          "content": data["ai_response"] ?? "I've analyzed your voice message.",
+          "emotion": data["emotion"] ?? data["voice_emotion"] ?? "neutral",
+          "stress_level": _calculateStressLevel(data["stress_score"] ?? data["burnout_score"]),
           "stress_score": data["stress_score"] ?? data["burnout_score"],
-          "emergency": data["emergency"],
+          "analysis": data["analysis"] ?? "",
+          "wellness_tip": data["wellness_tip"] ?? "",
+          "emergency": data["stress_score"] != null && data["stress_score"] >= 80,
+          "audio_features": data["audio_features"],
         });
       });
       _scrollToBottom();
@@ -942,7 +953,21 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                     if (!isUser) _buildAIBubbleHeader(msg),
                     
                     if (msg["inputType"] == "voice" && msg["audioUrl"] != null)
-                      _buildWaveformMessage(msg["audioUrl"])
+                      Column(
+                        crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                        children: [
+                          _buildWaveformMessage(msg["audioUrl"]),
+                          const SizedBox(height: 8),
+                          Text(
+                            msg["content"] == "Voice Message" ? "Transcribing..." : '"${msg["content"]}"',
+                            style: TextStyle(
+                              color: isUser ? Colors.white.withOpacity(0.9) : textColor.withOpacity(0.8),
+                              fontSize: 14,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        ],
+                      )
                     else
                       Text(
                         msg["content"],
@@ -967,6 +992,31 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                           ),
                         ),
                       _buildStressIndicator(msg),
+                      if (msg["audio_features"] != null)
+                        Container(
+                          margin: const EdgeInsets.only(top: 12),
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: primaryColor.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: primaryColor.withOpacity(0.1)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text("Vocal Analysis Metrics", style: TextStyle(color: primaryColor, fontSize: 11, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 6),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  _buildAudioMetric("Energy", "${(msg["audio_features"]["energy"] * 100).toStringAsFixed(1)}%"),
+                                  _buildAudioMetric("Pitch Var", "${msg["audio_features"]["pitch_variation"].toStringAsFixed(2)}"),
+                                  _buildAudioMetric("Pace", "${msg["audio_features"]["speech_rate"].toStringAsFixed(0)} bpm"),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
                       if (msg["wellness_tip"] != null && msg["wellness_tip"].toString().isNotEmpty)
                         _buildAIsuggestion(msg["wellness_tip"]),
                     ],
@@ -977,6 +1027,17 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildAudioMetric(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(color: textColor.withOpacity(0.5), fontSize: 10)),
+        const SizedBox(height: 2),
+        Text(value, style: TextStyle(color: textColor, fontSize: 11, fontWeight: FontWeight.bold)),
+      ],
     );
   }
 
@@ -1113,42 +1174,83 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 ),
                 const SizedBox(width: 4),
                 Expanded(
-                  child: TextField(
-                    controller: _msgCtrl,
-                    style: TextStyle(color: textColor, fontSize: 15),
-                    decoration: const InputDecoration(
-                      hintText: "How can I support you?",
-                      hintStyle: TextStyle(color: Colors.grey, fontSize: 14),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12),
-                    ),
-                    onSubmitted: (_) => _sendMessage(),
-                  ),
+                  child: _listening 
+                    ? _buildRecordingAnimation()
+                    : TextField(
+                        controller: _msgCtrl,
+                        style: TextStyle(color: textColor, fontSize: 15),
+                        decoration: const InputDecoration(
+                          hintText: "How can I support you?",
+                          hintStyle: TextStyle(color: Colors.grey, fontSize: 14),
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12),
+                        ),
+                        onSubmitted: (_) => _sendMessage(),
+                      ),
                 ),
                 const SizedBox(width: 8),
                 GestureDetector(
-                  onTap: _sendMessage,
+                  onTap: _listening ? _voiceInput : _sendMessage,
                   child: Container(
                     height: 44,
                     width: 44,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [primaryColor, primaryColor.withBlue(255)],
+                        colors: _listening 
+                            ? [Colors.redAccent, Colors.red] 
+                            : [primaryColor, primaryColor.withBlue(255)],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
                       shape: BoxShape.circle,
                       boxShadow: [
-                        BoxShadow(color: primaryColor.withOpacity(0.4), blurRadius: 10, offset: const Offset(0, 4)),
+                        BoxShadow(color: (_listening ? Colors.red : primaryColor).withOpacity(0.4), blurRadius: 10, offset: const Offset(0, 4)),
                       ],
                     ),
-                    child: const Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 22),
+                    child: Icon(_listening ? Icons.stop_rounded : Icons.arrow_upward_rounded, color: Colors.white, size: 22),
                   ),
                 ),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildRecordingAnimation() {
+    return Container(
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Text("Recording...", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+          const SizedBox(width: 16),
+          ...List.generate(15, (index) {
+            return TweenAnimationBuilder<double>(
+              tween: Tween<double>(begin: 0.1, end: math.Random().nextDouble() * 0.8 + 0.2),
+              duration: Duration(milliseconds: 200 + math.Random().nextInt(300)),
+              curve: Curves.easeInOut,
+              builder: (context, value, child) {
+                return Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                  width: 3,
+                  height: 30 * value,
+                  decoration: BoxDecoration(
+                    color: Colors.redAccent.withOpacity(0.8),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                );
+              },
+              onEnd: () {
+                if (mounted && _listening) {
+                  setState(() {});
+                }
+              },
+            );
+          }),
+        ],
       ),
     );
   }

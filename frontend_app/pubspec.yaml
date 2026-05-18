@@ -12,24 +12,34 @@ dependencies:
   flutter:
     sdk: flutter
 
-  http: ^0.13.6
+  http: ^1.2.0
   shared_preferences: ^2.2.2
 
   # ✅ Auth
   google_sign_in: ^6.3.0
   
   # 🔥 Firebase
-  firebase_core: ^2.32.0
-  firebase_auth: ^4.16.0
-  cloud_firestore: ^4.17.5
+  firebase_core: ^4.9.0
+  firebase_auth: ^6.5.0
+  cloud_firestore: ^6.4.1
   
-  # 🎤 Voice Input
+  # 🎤 Voice Input & Hardware
   speech_to_text: ^7.3.0
   image_picker: ^1.0.4
+  record: ^6.2.0
+  permission_handler: ^12.0.1
+  path_provider: ^2.1.5
+  
+  # 🧠 ML & Camera
+  camera: ^0.11.3+1
+  google_mlkit_face_detection: ^0.13.2
+  tflite_flutter: ^0.12.1
+  image: ^4.8.0
   fl_chart: ^1.2.0
   url_launcher: ^6.2.0
   local_auth: ^2.1.8
   flutter_secure_storage: ^9.0.0
+  just_audio: ^0.10.5
 
 dev_dependencies:
   flutter_test:
@@ -41,3 +51,5 @@ flutter:
   uses-material-design: true
   assets:
     - assets/google_logo.png
+    - assets/ml/emotion_model.tflite
+    - assets/ml/mobilenet_model.tflite

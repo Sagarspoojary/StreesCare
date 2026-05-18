@@ -1,63 +1,114 @@
-from fastapi import APIRouter, UploadFile, File
+from fastapi import APIRouter, UploadFile, File, Header, HTTPException
+from fastapi.responses import JSONResponse
 import shutil
 import os
 import uuid
+import datetime
+from typing import Optional
 
-from utils.audio_emotion import extract_features, detect_emotion_from_audio
+from utils.audio_emotion import extract_features, transcribe_audio
+from utils.gemini_ai import get_emotional_response
+from utils.pii_masking import mask_pii
+from routes.chat_routes import get_user_from_token
+from config.database import db
 
 router = APIRouter(tags=["Audio"])
 
-# Create temp directory for audio processing
 UPLOAD_DIR = "temp_audio"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-
 @router.post("/audio/analyze")
-async def analyze_audio(file: UploadFile = File(...)):
+async def analyze_audio(
+    file: UploadFile = File(...),
+    authorization: Optional[str] = Header(None)
+):
     """
-    Analyzes raw audio waveform for emotional markers.
-    NO speech-to-text is performed to ensure privacy and focus on vocal tone.
+    Complete AI Voice Analysis Pipeline:
+    VOICE INPUT -> Speech-to-Text -> PII Masking -> Emotion Analysis -> Gemini Response
     """
+    user = get_user_from_token(authorization)
+    user_id = user.get("user_id")
+
     file_path = ""
     try:
-        # Generate unique filename to avoid collisions
         ext = os.path.splitext(file.filename)[1] or ".wav"
         unique_filename = f"{uuid.uuid4()}{ext}"
         file_path = os.path.join(UPLOAD_DIR, unique_filename)
 
-        # Save uploaded file temporarily
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
         # 1. Extract Waveform Features
         features = extract_features(file_path)
-        
-        # 2. Detect Emotion
-        result = detect_emotion_from_audio(features)
+        if not features:
+            features = {"energy": 0, "pitch_variation": 0, "speech_rate": 0}
 
-        # Cleanup
+        # 2. Transcribe Audio
+        transcription = transcribe_audio(file_path)
+        if not transcription:
+            transcription = "(Unintelligible audio)"
+
+        # 3. PII Masking
+        masked_text = mask_pii(transcription)
+
+        # 4. Gemini AI Emotional Response
+        gemini_output = get_emotional_response(
+            user_message=masked_text,
+            input_type="voice",
+            audio_features=features
+        )
+
+        if not gemini_output:
+            gemini_output = {
+                "emotion": "neutral",
+                "stress_score": 20,
+                "analysis": "Failed to fully analyze audio.",
+                "ai_response": "I heard you, but I'm having trouble analyzing the emotion. Could you try telling me again?",
+                "wellness_tip": "Take a deep breath."
+            }
+
+        # 5. Build JSON Payload
+        stress_score = gemini_output.get("stress_score", 0)
+        final_payload = {
+            "transcription": transcription,
+            "masked_text": masked_text,
+            "emotion": gemini_output.get("emotion", "neutral"),
+            "stress_score": stress_score,
+            "stress_level": "high" if stress_score > 60 else "medium" if stress_score > 40 else "low",
+            "analysis": gemini_output.get("analysis", ""),
+            "ai_response": gemini_output.get("ai_response", ""),
+            "wellness_tip": gemini_output.get("wellness_tip", ""),
+            "audio_features": features
+        }
+
+        # 6. Save to Firestore (History)
+        if db:
+            db.collection("chats").add({
+                "user_id": user_id,
+                "session_id": "voice_session",
+                "user_message": masked_text,
+                "ai_response": final_payload["ai_response"],
+                "emotion": final_payload["emotion"],
+                "score": final_payload["stress_score"],
+                "stress_level": final_payload["stress_level"],
+                "analysis": final_payload["analysis"],
+                "emergency": stress_score >= 80,
+                "is_private": False,
+                "input_type": "voice",
+                "created_at": datetime.datetime.utcnow()
+            })
+
         if os.path.exists(file_path):
             os.remove(file_path)
 
-        return {
-            "message": "Audio processed successfully",
-            "emotion": result.get("emotion", "neutral"),
-            "stress_level": result.get("stress_level", "low"),
-            "burnout_score": result.get("burnout_score", 20),
-            "emergency": result.get("stress_level") == "high"
-        }
+        return JSONResponse(content=final_payload)
 
     except Exception as e:
         print("AUDIO ROUTE ERROR:", e)
-        
-        # Cleanup on error
         if file_path and os.path.exists(file_path):
             os.remove(file_path)
 
-        return {
-            "message": "Audio processing failed",
-            "emotion": "neutral",
-            "stress_level": "low",
-            "burnout_score": 20,
-            "emergency": False
-        }
+        return JSONResponse(status_code=500, content={
+            "error": str(e),
+            "message": "Audio processing failed"
+        })
